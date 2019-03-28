@@ -3,64 +3,73 @@ import { Animated, PanResponder, PanResponderInstance } from 'react-native'
 
 import { getAnimatedViewStyle, IAnimatedViewStyle } from './styles'
 
-interface IProps {
+interface IAnimationProps {
   item: any
-  items: any[]
-  index: number
-  style?: CSSProperties
-  isStack?: boolean
-  cardRotation?: number
   rightSwipeThreshold?: number
   leftSwipeThreshold?: number
   onSwipeLeft: (item: any) => void
   onSwipeRight: (item: any) => void
 }
+interface IProps extends IAnimationProps {
+  items: any[]
+  index: number
+  style?: CSSProperties
+  isStack?: boolean
+  cardRotation?: number
+}
 
-const getPanHandlers = (panResponder: PanResponderInstance | null) => 
-  panResponder 
+const getPanHandlers = (panResponder: PanResponderInstance | null) =>
+  panResponder
     ? panResponder.panHandlers
     : {}
 
+const onPanResponderRelease = (
+  pan: Animated.ValueXY, 
+  { rightSwipeThreshold, leftSwipeThreshold, onSwipeRight, onSwipeLeft, item }: IAnimationProps
+) => () => {
+  const value = (pan.x as any)._value
+
+  const isSwipeRight = value > (rightSwipeThreshold as number)
+    && !!onSwipeRight
+  const isSwipeLeft = value < (leftSwipeThreshold as number)
+    && !!onSwipeLeft
+
+  switch (true) {
+    case isSwipeLeft:
+      onSwipeLeft(item)
+      break
+    case isSwipeRight:
+      onSwipeRight(item)
+      break
+    default:
+      Animated.spring(pan, {
+        toValue: 0,
+      }).start()
+  }
+}
+
+const onPanResponderGrant = (pan: Animated.ValueXY) => () => {
+  pan.setValue({ x: 0, y: 0 })
+}
+
+const onPanResponderMove = (pan: Animated.ValueXY) => (e, gestureState) => {
+  Animated.event([
+    null, { dx: pan.x, dy: pan.y },
+  ])(e, gestureState)
+}
+
 export const SwipeWrapper: FC<IProps> = ({
-  children, style, onSwipeLeft, onSwipeRight, item, ...other
+  children, style, ...other
 }) => {
   const [pan] = useState(new Animated.ValueXY());
   const [panResponder, setPanResponder] = useState<PanResponderInstance | null>(null)
 
-  const { leftSwipeThreshold, rightSwipeThreshold } = other
-
   useEffect(() => {
     const updatedPanResponder = PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        pan.setValue({ x: 0, y: 0 })
-      },
-      onPanResponderMove: (e, gestureState) => {
-        Animated.event([
-          null, { dx: pan.x, dy: pan.y },
-        ])(e, gestureState)
-      },
-      onPanResponderRelease: () => {
-        const value = (pan.x as any)._value
-
-        const isSwipeRight = value > (rightSwipeThreshold as number) 
-          && !!onSwipeRight
-        const isSwipeLeft = value < (leftSwipeThreshold as number) 
-          && !!onSwipeLeft
-
-        switch (true) {
-          case isSwipeLeft:
-            onSwipeLeft(item)
-            break
-          case isSwipeRight:
-            onSwipeRight(item)
-            break
-          default:
-            Animated.spring(pan, {
-              toValue: 0,
-            }).start()
-        }
-      },
+      onPanResponderGrant: onPanResponderGrant(pan),
+      onPanResponderMove: onPanResponderMove(pan),
+      onPanResponderRelease: onPanResponderRelease(pan, other)
     })
 
     setPanResponder(updatedPanResponder)
